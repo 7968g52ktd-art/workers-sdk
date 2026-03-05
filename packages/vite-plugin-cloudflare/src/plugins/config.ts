@@ -145,7 +145,11 @@ export const configPlugin = createPlugin("config", (ctx) => {
 					}
 				}
 
-				writeDeployConfig(ctx.resolvedPluginConfig, ctx.resolvedViteConfig);
+				writeDeployConfig(
+					ctx.resolvedPluginConfig,
+					ctx.resolvedViteConfig,
+					ctx.resolvedPluginConfig.type === "assets-only"
+				);
 			},
 		},
 	};
