@@ -1,5 +1,70 @@
 # wrangler
 
+## 4.86.0
+
+### Minor Changes
+
+- [#13637](https://github.com/cloudflare/workers-sdk/pull/13637) [`9eb9e69`](https://github.com/cloudflare/workers-sdk/commit/9eb9e69ade8e8195c79a408f821d4f4899ab91a2) Thanks [@edmundhung](https://github.com/edmundhung)! - Add `--tunnel` flag to `wrangler dev` for sharing your local dev server via Cloudflare Quick Tunnels
+
+  You can now expose your local dev server publicly by passing `--tunnel`:
+
+  ```sh
+  wrangler dev --tunnel
+  ```
+
+  This starts a Cloudflare Quick Tunnel that gives you a random `*.trycloudflare.com` URL to share. The tunnel stops automatically when the dev session ends. Quick tunnels don't require a Cloudflare account or any configuration.
+
+  A warning is shown when Server-Sent Events (SSE) responses are detected through the tunnel, since quick tunnels have a 100-second idle timeout that may interrupt long-lived connections.
+
+- [#13254](https://github.com/cloudflare/workers-sdk/pull/13254) [`e867ac2`](https://github.com/cloudflare/workers-sdk/commit/e867ac28dce5923331c9b8ad50a8feccfedf6c5c) Thanks [@tgarg-cf](https://github.com/tgarg-cf)! - Add `wrangler queues consumer list` subcommands for listing queue consumers
+
+  Three new commands are available for listing consumers on a queue:
+
+  - `wrangler queues consumer list <queue-name>` — lists all consumers (both worker and HTTP pull), grouped by type
+  - `wrangler queues consumer worker list <queue-name>` — lists only worker consumers
+  - `wrangler queues consumer http list <queue-name>` — lists only HTTP pull consumers
+
+### Patch Changes
+
+- [#13649](https://github.com/cloudflare/workers-sdk/pull/13649) [`ae8eae3`](https://github.com/cloudflare/workers-sdk/commit/ae8eae3fd5d374aed8edcc0aa61d0af4a8d08118) Thanks [@petebacondarwin](https://github.com/petebacondarwin)! - Fix service binding and tail consumer `props` being dropped between workers in different local dev instances
+
+  When a service binding or tail consumer configured with `props` targeted a worker running in a separate `wrangler dev` instance (via the dev registry), the `props` were silently dropped and the remote entrypoint saw an empty `ctx.props`. Props are now forwarded correctly across the dev registry boundary, matching the behavior users get when all workers run in a single instance.
+
+  ```jsonc
+  // wrangler.json
+  {
+    "services": [
+      {
+        "binding": "AUTH",
+        "service": "auth-worker", // may be in a separate `wrangler dev` process
+        "entrypoint": "SessionEntry",
+        "props": { "tenant": "acme" }
+      }
+    ]
+  }
+  ```
+
+  The target worker's `SessionEntry` entrypoint now correctly receives `{ tenant: "acme" }` on `ctx.props` regardless of which local dev instance it runs in.
+
+- [#13662](https://github.com/cloudflare/workers-sdk/pull/13662) [`f2e2241`](https://github.com/cloudflare/workers-sdk/commit/f2e22413eedea892a230e2197a1c0d677e3dab66) Thanks [@petebacondarwin](https://github.com/petebacondarwin)! - Fix three resource leaks in `unstable_startWorker` teardown that could prevent Node from exiting cleanly after `worker.dispose()`.
+
+  - The esbuild context created by `bundleWorker` is now disposed when the initial build fails. Previously a failing initial build (e.g. an unresolvable entrypoint, or a worker started with an invalid config via `setConfig`) left the esbuild child process running for the lifetime of the parent Node process.
+  - `runBuild`'s cleanup function now awaits the in-flight build before running the bundler's stop handler. Previously teardown could return before `esbuild.BuildContext.dispose()` had been called, so the esbuild watcher kept the event loop alive after dispose had resolved.
+  - `BundlerController.teardown()` now runs the esbuild cleanup before removing the bundler's temporary directory, and aborts the in-flight bundle build so it cannot emit stale `bundleStart`/`bundleComplete` events after teardown. Previously the tmpdir was removed first, which in race with an in-flight rebuild produced confusing "Could not resolve `.wrangler/tmp/bundle-XXXX/middleware-loader.entry.ts`" errors during dispose.
+
+- [#13662](https://github.com/cloudflare/workers-sdk/pull/13662) [`f2e2241`](https://github.com/cloudflare/workers-sdk/commit/f2e22413eedea892a230e2197a1c0d677e3dab66) Thanks [@petebacondarwin](https://github.com/petebacondarwin)! - Fix the `wrangler tail` command leaking a signal-exit listener after the tail has been cleanly closed.
+
+  The tail command registered both a `tail.on("close", exit)` listener and a process-level `onExit(exit)` handler, but never removed the latter after `exit()` had run. In long-lived CLI processes this is harmless — the handler eventually runs once on shutdown — but in unit tests that repeatedly invoke `wrangler tail`, every invocation accumulates a handler that fires during test-runner shutdown. Those late invocations call `deleteTail()` after the test's auth mocks have been torn down, producing spurious "Not logged in" unhandled rejections which fail the Linux CI runs.
+
+  The handler is now removed as soon as `exit()` runs, and `exit()` is guarded against re-entry so it is idempotent if both the WebSocket `close` event and a real signal fire for the same session.
+
+- [#13628](https://github.com/cloudflare/workers-sdk/pull/13628) [`e6c437a`](https://github.com/cloudflare/workers-sdk/commit/e6c437a3d40d2619a47c886673969969c6a8a87d) Thanks [@emily-shen](https://github.com/emily-shen)! - fix: prioritise `CLOUDFLARE_ACCOUNT_ID` over a cached account id for all Pages commands
+
+  Previously, some Pages commands (`pages deploy`, `pages deployment list/delete/tail`, `pages download config`, `pages secret`) used a cached account id over the `CLOUDFLARE_ACCOUNT_ID` environment variable. The `pages project` commands already correctly prioritised `CLOUDFLARE_ACCOUNT_ID`.
+
+- Updated dependencies [[`ae8eae3`](https://github.com/cloudflare/workers-sdk/commit/ae8eae3fd5d374aed8edcc0aa61d0af4a8d08118), [`ef24ff2`](https://github.com/cloudflare/workers-sdk/commit/ef24ff28d905ca3706a272653c52a342de3c4339)]:
+  - miniflare@4.20260424.1
+
 ## 4.85.0
 
 ### Minor Changes
